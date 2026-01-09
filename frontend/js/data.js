@@ -133,6 +133,44 @@ async function postApiOrFallback(endpoint, bodyData, mockFallbackFn = null) {
     }
 }
 
+/**
+ * PATCH Request Wrapper (for Updates)
+ */
+async function patchApiOrFallback(endpoint, bodyData, mockFallbackFn = null) {
+    if (CONFIG.ENV === 'mock') {
+        console.log(`[Mock] PATCH ${endpoint} (Skipped API)`);
+        return mockFallbackFn ? mockFallbackFn(bodyData) : null;
+    }
+
+    try {
+        const url = `${CONFIG.API.BASE_URL}${endpoint}`;
+        console.log(`[API] PATCH ${url}...`);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+        const res = await fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyData),
+            credentials: 'include',
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        return await res.json();
+
+    } catch (err) {
+        console.warn(`[API Failed] ${err.message}`);
+        if (CONFIG.ENV === 'mock-hybrid' && mockFallbackFn) {
+            console.log(`[Hybrid] Fallback to Mock Logic...`);
+            return mockFallbackFn(bodyData);
+        }
+        throw err;
+    }
+}
+
 // ---------------------------------------------------------
 // Mock Logic Providers
 // ---------------------------------------------------------
@@ -187,6 +225,51 @@ async function initData() {
 
     globalStudents = data || [];
     console.log("Global Data Ready:", globalStudents.length, "students");
+}
+
+function saveData() {
+    try {
+        localStorage.setItem(STUDENTS_STORAGE_KEY, JSON.stringify(globalStudents));
+    } catch (err) {
+        console.warn("Failed to persist students data:", err);
+    }
+}
+
+async function updateStudentMemo(studentId, memo) {
+    const student = globalStudents.find(s => s.id == studentId);
+    if (!student) {
+        throw new Error("학생 정보를 찾을 수 없습니다.");
+    }
+
+    const previousMemo = student.memo;
+    const normalizedMemo = memo == null ? "" : memo;
+
+    const applyLocalUpdate = () => {
+        student.memo = normalizedMemo;
+        saveData();
+        return { success: true, student_id: studentId, updated_at: new Date().toISOString() };
+    };
+
+    if (CONFIG.ENV === 'mock') {
+        return applyLocalUpdate();
+    }
+
+    try {
+        const response = await patchApiOrFallback(
+            `/students/${studentId}/memo`,
+            { memo: normalizedMemo },
+            applyLocalUpdate
+        );
+        if (response && response.success) {
+            student.memo = normalizedMemo;
+            saveData();
+        }
+        return response;
+    } catch (err) {
+        student.memo = previousMemo;
+        saveData();
+        throw err;
+    }
 }
 
 // NOTE: We do NOT call initData() automatically here anymore.

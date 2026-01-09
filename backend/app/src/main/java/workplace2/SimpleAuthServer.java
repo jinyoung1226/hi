@@ -50,6 +50,7 @@ public class SimpleAuthServer {
 
     // ==== JWT COOKIE 이름 ==== //
     private static final String JWT_COOKIE_NAME = "ACCESS_TOKEN";
+    private static final Map<Long, String> STUDENT_MEMOS = new ConcurrentHashMap<>();
 
     public static void main(String[] args) throws Exception {
         // JDBC 드라이버 로드
@@ -266,7 +267,7 @@ public class SimpleAuthServer {
         exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "http://localhost:8000");
 
         // 2. Allow methods (GET, POST, OPTIONS, etc.)
-        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS");
 
         // 3. Allow headers (Content-Type is usually required for JSON/Forms)
         exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");

@@ -7,7 +7,7 @@
 const CONFIG = {
   // Current Environment: 'mock', 'production', or 'mock-hybrid'
   // 'mock-hybrid': Try API first, fallback to mock if failed.
-  ENV: "production",
+  ENV: "mock-hybrid",
 
   // API Base URLs
   API: {

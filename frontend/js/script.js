@@ -182,17 +182,17 @@ function getRandomTags(student) {
     return tags;
 }
 
-function saveStudentMemo(id) {
+async function saveStudentMemo(id) {
     const text = document.getElementById('managerMemo').value;
     const student = getStudentById(id);
-    if (student) {
-        student.memo = text;
-        saveData(); // defined in data.js
+    if (!student) return;
+
+    try {
+        await updateStudentMemo(id, text);
         console.log(`[Memo Saved] Student ${id}: ${text}`);
 
         // Visual feedback
         const btn = document.querySelector('#profileModal .btn-primary');
-        const originalText = btn.innerHTML;
         btn.innerHTML = '<i class="fa-solid fa-check"></i> 저장됨';
         btn.classList.add('btn-success');
         btn.classList.remove('btn-primary');
@@ -201,5 +201,7 @@ function saveStudentMemo(id) {
             const modal = bootstrap.Modal.getInstance(modalEl);
             modal.hide();
         }, 800);
+    } catch (err) {
+        alert(`메모 저장 실패: ${err.message}`);
     }
 }

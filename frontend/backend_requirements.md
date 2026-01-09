@@ -149,8 +149,10 @@
   ```
 - **Response (200 OK)**:
   ```json
-  { "success": true, "updated_at": "2026-01-09T10:00:00Z" }
+  { "success": true, "student_id": 101, "updated_at": "2026-01-09T10:00:00Z" }
   ```
+- **Validation**:
+  - `memo` 키는 필수 (값은 빈 문자열 허용)
 
 ---
 

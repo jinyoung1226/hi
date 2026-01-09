@@ -75,7 +75,11 @@ async function callApiOrFallback(endpoint, options = {}, mockFallbackFn = null) 
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000);
 
-        const res = await fetch(url, { ...options, signal: controller.signal });
+        const res = await fetch(url, {
+            credentials: 'include',
+            ...options,
+            signal: controller.signal
+        });
         clearTimeout(timeoutId);
 
         if (!res.ok) throw new Error(`Status ${res.status}`);
@@ -111,6 +115,7 @@ async function postApiOrFallback(endpoint, bodyData, mockFallbackFn = null) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(bodyData),
+            credentials: 'include',
             signal: controller.signal
         });
         clearTimeout(timeoutId);

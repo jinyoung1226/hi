@@ -59,42 +59,107 @@ const STUDENTS_STORAGE_KEY = 'skala_bootcamp_students';
 /**
  * Core function to fetch data with hybrid fallback strategy
  */
+/**
+ * GET Request Wrapper
+ */
 async function callApiOrFallback(endpoint, options = {}, mockFallbackFn = null) {
-    // 1. Mock Mode
     if (CONFIG.ENV === 'mock') {
-        console.log(`[Mock] Skipping API ${endpoint}, using fallback.`);
+        console.log(`[Mock] GET ${endpoint} (Skipped API)`);
         return mockFallbackFn ? mockFallbackFn() : null;
     }
 
-    // 2. Production or Hybrid -> Try API
     try {
         const url = `${CONFIG.API.BASE_URL}${endpoint}`;
-        console.log(`[API] Requesting ${url}...`);
+        console.log(`[API] GET ${url}...`);
 
-        // Timeout for faster fallback in hybrid
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000); // 2s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
 
         const res = await fetch(url, { ...options, signal: controller.signal });
         clearTimeout(timeoutId);
 
         if (!res.ok) throw new Error(`Status ${res.status}`);
-
-        const data = await res.json();
-        console.log(`[API] Success:`, data);
-        return data;
+        return await res.json();
 
     } catch (err) {
         console.warn(`[API Failed] ${err.message}`);
-
-        // 3. Fallback if Hybrid
         if (CONFIG.ENV === 'mock-hybrid' && mockFallbackFn) {
-            console.log(`[Hybrid] Recovering with Mock Data...`);
+            console.log(`[Hybrid] Fallback to Mock...`);
             return mockFallbackFn();
         }
-        throw err; // Re-throw in production
+        throw err;
     }
 }
+
+/**
+ * POST Request Wrapper (for Auth/Actions)
+ */
+async function postApiOrFallback(endpoint, bodyData, mockFallbackFn = null) {
+    if (CONFIG.ENV === 'mock') {
+        console.log(`[Mock] POST ${endpoint} (Skipped API)`);
+        return mockFallbackFn ? mockFallbackFn(bodyData) : null;
+    }
+
+    try {
+        const url = `${CONFIG.API.BASE_URL}${endpoint}`;
+        console.log(`[API] POST ${url}...`);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyData),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        return await res.json();
+
+    } catch (err) {
+        console.warn(`[API Failed] ${err.message}`);
+        if (CONFIG.ENV === 'mock-hybrid' && mockFallbackFn) {
+            console.log(`[Hybrid] Fallback to Mock Logic...`);
+            return mockFallbackFn(bodyData);
+        }
+        throw err;
+    }
+}
+
+// ---------------------------------------------------------
+// Mock Logic Providers
+// ---------------------------------------------------------
+
+const MockAuth = {
+    login: async (data) => {
+        // Simulate Network Delay
+        await new Promise(r => setTimeout(r, 800));
+
+        if (data.email && data.email.includes('@')) {
+            return {
+                access_token: "mock_token_" + Date.now(),
+                user_name: "Mock Admin",
+                role: "ADMIN"
+            };
+        }
+        throw new Error("이메일 형식이 올바르지 않습니다.");
+    },
+
+    register: async (data) => {
+        await new Promise(r => setTimeout(r, 1000));
+
+        if (data.auth_code !== 'SKALA2026') {
+            throw new Error("기업 인증 코드가 올바르지 않습니다.");
+        }
+        return {
+            id: "user_" + Date.now(),
+            message: "회원가입이 완료되었습니다."
+        };
+    }
+};
+
 
 /**
  * Initialize Data (Async)

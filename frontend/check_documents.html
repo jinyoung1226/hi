@@ -104,7 +104,8 @@
     <script src="js/script.js"></script>
     <script>
         // Mock Documents
-        const sampleDocs = [
+        // Local Fallback Data
+        const getLocalDocs = () => [
             { id: 1, studentId: 1, type: "병가", applyDate: "2024-05-10", proofDate: "2024-05-10", keyword: "처방전", evidence: "file1.jpg" },
             { id: 2, studentId: 2, type: "공가", applyDate: "2024-05-12", proofDate: "2024-05-13", keyword: "예비군", evidence: "file2.jpg" }, // Mismatch
             { id: 3, studentId: 3, type: "공가", applyDate: "2024-05-15", proofDate: "2024-05-15", keyword: "토익시험", evidence: "file3.jpg" }, // Bad key
@@ -113,9 +114,15 @@
             { id: 6, studentId: 6, type: "병가", applyDate: "2024-05-22", proofDate: "2024-05-22", keyword: "약국영수증", evidence: "file6.jpg" },
         ];
 
+        let currentDocs = [];
+
         document.addEventListener('DOMContentLoaded', async () => {
             renderSidebar('docs');
-            await initData();
+            await initData(); // Fetch Students
+
+            // Fetch Documents (Hybrid)
+            currentDocs = await callApiOrFallback('/documents?status=PENDING', {}, getLocalDocs);
+
             renderTable();
         });
 
@@ -126,7 +133,9 @@
             let redCount = 0;
             let greenCount = 0;
 
-            sampleDocs.forEach(doc => {
+            if (!currentDocs) return;
+
+            currentDocs.forEach(doc => {
                 const student = getStudentById(doc.studentId);
 
                 // AI Logic applied here

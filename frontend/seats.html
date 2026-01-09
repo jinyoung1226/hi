@@ -255,24 +255,43 @@
             renderSeats();
         }
 
-        function runAiArrangement() {
+        async function runAiArrangement() {
             // Show Spinner
             const overlay = document.getElementById('loadingOverlay');
             overlay.classList.remove('d-none');
             overlay.classList.add('d-flex');
 
-            setTimeout(() => {
-                // Shuffle Array
-                for (let i = currentSeats.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [currentSeats[i], currentSeats[j]] = [currentSeats[j], currentSeats[i]];
+            // Mock Fallback Logic
+            const mockShuffle = () => {
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        const newSeats = [...currentSeats];
+                        for (let i = newSeats.length - 1; i > 0; i--) {
+                            const j = Math.floor(Math.random() * (i + 1));
+                            [newSeats[i], newSeats[j]] = [newSeats[j], newSeats[i]];
+                        }
+                        resolve({ seats: newSeats });
+                    }, 2000);
+                });
+            };
+
+            try {
+                // Hybrid Call
+                // API expects { seats: [...] } and returns { seats: [...] }
+                const result = await postApiOrFallback('/seats/auto-arrange', { current_layout: currentSeats }, mockShuffle);
+
+                if (result && result.seats) {
+                    currentSeats = result.seats;
+                    renderSeats();
                 }
 
-                renderSeats();
-
+            } catch (error) {
+                console.error("AI Arrangement Failed:", error);
+                alert("AI 배치 중 오류가 발생했습니다.");
+            } finally {
                 overlay.classList.remove('d-flex');
                 overlay.classList.add('d-none');
-            }, 2000);
+            }
         }
 
         function detectRisks() {

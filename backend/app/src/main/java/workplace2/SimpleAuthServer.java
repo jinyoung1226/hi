@@ -116,6 +116,9 @@ public class SimpleAuthServer {
         // -> 로그인 + 세션 + JWT 발급 + 8008으로 직접 리다이렉트 테스트 완료
         // -> 로그인 + 세션 + JWT 발급 + 프론트엔드로 리다이렉트 처리
         server.createContext("/api/login", exchange -> {
+            if (handlePreflight(exchange)) return;
+            addCorsHeaders(exchange);
+            System.out.println("Received /api/login request");
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
                 methodNotAllowed(exchange);
                 return;
@@ -244,6 +247,23 @@ public class SimpleAuthServer {
 
     private static boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
+    }
+
+    private static void addCorsHeaders(HttpExchange exchange) {
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
+    }
+
+    private static boolean handlePreflight(HttpExchange exchange) throws IOException {
+        if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+            addCorsHeaders(exchange);
+            exchange.sendResponseHeaders(204, -1);
+            exchange.close();
+            return true;
+        }
+        return false;
     }
 
 

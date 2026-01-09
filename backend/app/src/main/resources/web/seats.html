@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>자리 배치 - 부트캠프 관리 지능화 서비스</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .seat-container {
+            user-select: none;
+        }
+
+        .seat-slot {
+            width: 100px;
+            height: 90px;
+            background: #f1f5f9;
+            border: 2px dashed #cbd5e1;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .seat-slot.drag-over {
+            background: #e0f2fe;
+            border-color: var(--primary-color);
+        }
+
+        .student-card-seat {
+            width: 100%;
+            height: 100%;
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: grab;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            position: relative;
+        }
+
+        .student-card-seat:active {
+            cursor: grabbing;
+        }
+
+        /* Risk Alert Overlay - Monochrome */
+        .risk-alert {
+            box-shadow: 0 0 0 2px #000;
+            background-image: repeating-linear-gradient(45deg, #f5f5f5 0, #f5f5f5 2px, #fff 0, #fff 10px);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <!-- Sidebar injected -->
+
+        <div id="content">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="fw-bold text-dark m-0">교육생 자리 배치</h2>
+                    <p class="text-secondary small mt-1">AI를 활용하여 효율적인 자리 배치를 진행하세요.</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-success" onclick="downloadExcel()">
+                        <i class="fa-solid fa-file-excel me-1"></i> Excel 다운로드
+                    </button>
+                    <button class="btn btn-primary" onclick="runAiArrangement()" id="aiBtn">
+                        <i class="fa-solid fa-wand-magic-sparkles me-1"></i> AI 자동 배치
+                    </button>
+                    <div class="d-md-none">
+                        <button type="button" id="sidebarCollapse" class="btn btn-secondary">
+                            <i class="fa-solid fa-bars"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Seating Chart -->
+                <div class="col-lg-9">
+                    <div class="card border-0 shadow-sm p-4 bg-white" style="min-height: 600px;">
+                        <div class="text-center mb-3">
+                            <span class="badge bg-secondary mb-2">스크린 / 칠판</span>
+                            <div class="w-100 bg-light rounded" style="height: 10px;"></div>
+                        </div>
+
+                        <div id="seatMap" class="d-flex flex-column align-items-center mt-4">
+                            <!-- Seats populated by JS -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Warnings / Sidebar Info -->
+                <div class="col-lg-3">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-white border-0">
+                            <h6 class="fw-bold m-0 text-danger"><i class="fa-solid fa-triangle-exclamation me-2"></i>자리
+                                배치 경고</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <ul class="list-group list-group-flush" id="warningList">
+                                <li class="list-group-item text-center text-muted small py-4">
+                                    현재 감지된 위험 요소가 없습니다.
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay"
+        class="position-fixed top-0 start-0 w-100 h-100 bg-white d-none flex-column justify-content-center align-items-center"
+        style="z-index: 2000; opacity: 0.9;">
+        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+        <h5 class="fw-bold animate-pulse">AI가 최적의 자리를 계산 중입니다...</h5>
+        <p class="text-muted small">성격 유형, 성적, 과거 이력을 분석하고 있습니다.</p>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/script.js"></script>
+    <script>
+        // State
+        let currentSeats = []; // Array of student IDs or null. Size 34.
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderSidebar('seats');
+            initSeats();
+            renderSeats();
+        });
+
+        function initSeats() {
+            // First time load: just fill seats sequentially or randomly
+            // We have 34 students. Total slots 34.
+            // If we have saved layout, load it. For now, just linear fill.
+            currentSeats = globalStudents.map(s => s.id);
+        }
+
+        function renderSeats() {
+            const container = document.getElementById('seatMap');
+            container.innerHTML = '';
+            const warnings = [];
+
+            // Layout definition
+            // Rows 1-5: 3 - Gap - 3 (6 seats per row)
+            // Row 6: 2 - Gap - 2 (4 seats per row)
+            // Total 30 + 4 = 34.
+
+            let globalIdx = 0;
+
+            for (let r = 0; r < 6; r++) {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'seat-row';
+
+                // Left Group
+                const leftGroup = document.createElement('div');
+                leftGroup.className = r < 5 ? 'seat-group' : 'seat-group small';
+                const leftCount = r < 5 ? 3 : 2;
+
+                for (let c = 0; c < leftCount; c++) {
+                    leftGroup.appendChild(createSeatSlot(globalIdx));
+                    globalIdx++;
+                }
+
+                // Right Group
+                const rightGroup = document.createElement('div');
+                rightGroup.className = r < 5 ? 'seat-group' : 'seat-group small';
+                const rightCount = r < 5 ? 3 : 2;
+
+                for (let c = 0; c < rightCount; c++) {
+                    rightGroup.appendChild(createSeatSlot(globalIdx));
+                    globalIdx++;
+                }
+
+                rowDiv.appendChild(leftGroup);
+                rowDiv.appendChild(rightGroup);
+                container.appendChild(rowDiv);
+            }
+
+            // Check Risks after rendering
+            detectRisks();
+        }
+
+        function createSeatSlot(index) {
+            const slot = document.createElement('div');
+            slot.className = 'seat-slot';
+            slot.dataset.index = index;
+
+            // Drag Events on Slot (Dropzone)
+            slot.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                slot.classList.add('drag-over');
+            });
+            slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+            slot.addEventListener('drop', (e) => handleDrop(e, index));
+
+            const studentId = currentSeats[index];
+            if (studentId) {
+                const student = getStudentById(studentId);
+                const card = document.createElement('div');
+                card.className = 'student-card-seat';
+                card.draggable = true;
+
+                // Inner Content
+                card.innerHTML = `
+                    <div class="fw-bold small text-dark">${student.name}</div>
+                    <div class="badge bg-light text-secondary border mt-1" style="font-size: 0.6rem;">${student.mbti}</div>
+                `;
+
+                // Risk Highlight Hook
+                card.id = `seat-card-${index}`;
+
+                // Drag Start
+                card.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', index);
+                    // Add some visual feedback
+                    setTimeout(() => card.classList.add('invisible'), 0);
+                });
+                card.addEventListener('dragend', () => card.classList.remove('invisible'));
+
+                // Click to view profile
+                card.addEventListener('click', () => openProfileModal(student.id));
+
+                slot.appendChild(card);
+            }
+
+            return slot;
+        }
+
+        function handleDrop(e, targetIndex) {
+            e.preventDefault();
+            const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+            document.querySelectorAll('.seat-slot').forEach(s => s.classList.remove('drag-over'));
+
+            if (isNaN(fromIndex) || fromIndex === targetIndex) return;
+
+            // Swap logic
+            const temp = currentSeats[targetIndex];
+            currentSeats[targetIndex] = currentSeats[fromIndex];
+            currentSeats[fromIndex] = temp;
+
+            renderSeats();
+        }
+
+        function runAiArrangement() {
+            // Show Spinner
+            const overlay = document.getElementById('loadingOverlay');
+            overlay.classList.remove('d-none');
+            overlay.classList.add('d-flex');
+
+            setTimeout(() => {
+                // Shuffle Array
+                for (let i = currentSeats.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [currentSeats[i], currentSeats[j]] = [currentSeats[j], currentSeats[i]];
+                }
+
+                renderSeats();
+
+                overlay.classList.remove('d-flex');
+                overlay.classList.add('d-none');
+            }, 2000);
+        }
+
+        function detectRisks() {
+            const warningList = document.getElementById('warningList');
+            warningList.innerHTML = '';
+
+            let hasRisk = false;
+
+            // Simple Logic: 
+            // 1. If adjacent students have conflicts (Mock: just random logic or check risk_factor overlap).
+            // 2. Mock Logic: If index i has '과거 갈등 이력' and index i+1 has it too -> Trigger.
+
+            // Loop through seats linear for simplicity (checking only right neighbor)
+            for (let i = 0; i < currentSeats.length - 1; i++) {
+                // Skip if gap (approximate logic, ignoring gap specific indices 2->3 etc for MVP)
+                if (!currentSeats[i] || !currentSeats[i + 1]) continue;
+
+                const s1 = getStudentById(currentSeats[i]);
+                const s2 = getStudentById(currentSeats[i + 1]);
+
+                // Mock Condition: Both have any risk factor OR random collision
+                if ((s1.risk_factors.length > 0 && s2.risk_factors.length > 0) && Math.random() > 0.7) {
+                    hasRisk = true;
+
+                    // Highlight UI
+                    const card1 = document.getElementById(`seat-card-${i}`);
+                    const card2 = document.getElementById(`seat-card-${i + 1}`);
+                    if (card1) card1.classList.add('risk-alert');
+                    if (card2) card2.classList.add('risk-alert');
+
+                    // Add to list
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item bg-danger-subtle d-flex justify-content-between align-items-center p-3 mb-2 rounded';
+                    li.innerHTML = `
+                        <div>
+                            <span class="fw-bold small text-danger">⚠️ 관계 주의</span>
+                            <div class="small text-dark mt-1">${s1.name} & ${s2.name}</div>
+                        </div>
+                        <button class="btn btn-sm btn-white bg-white shadow-sm text-muted" onclick="this.parentElement.remove()">확인</button>
+                    `;
+                    warningList.appendChild(li);
+                }
+            }
+
+            if (!hasRisk) {
+                warningList.innerHTML = '<li class="list-group-item text-center text-muted small py-4">현재 감지된 위험 요소가 없습니다.</li>';
+            }
+        }
+
+        function downloadExcel() {
+            // Flatten data
+            // Row | Col | Name | ID
+            const data = [];
+            currentSeats.forEach((id, idx) => {
+                const s = getStudentById(id);
+                data.push({
+                    "Seat Index": idx + 1,
+                    "Name": s.name,
+                    "ID": s.id,
+                    "MBTI": s.mbti,
+                    "Score": s.score
+                });
+            });
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Seats");
+            XLSX.writeFile(wb, "seat_arrangement.xlsx");
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>팀 빌딩 - 부트캠프 관리 지능화 서비스</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="css/style.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .team-container {
+            min-height: 400px;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: all 0.2s;
+            border: 2px dashed transparent;
+        }
+
+        .team-container.drag-over {
+            background: #e0f2fe;
+            border-color: var(--primary-color);
+        }
+
+        .student-item {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px;
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .student-item:active {
+            cursor: grabbing;
+        }
+
+        /* Badges */
+        .badge-career {
+            background-color: #404040;
+            color: white;
+            border: 1px solid #404040;
+        }
+
+        .badge-leader {
+            background-color: #000;
+            color: white;
+            border: 1px solid #000;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+        <!-- Sidebar -->
+        <div id="content">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="fw-bold text-dark m-0">프로젝트 팀 빌딩</h2>
+                    <p class="text-secondary small mt-1">AI 성향 분석을 통한 최적의 팀 구성 시뮬레이션</p>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <select class="form-select w-auto shadow-sm" id="teamSizeSelect">
+                        <option value="5">팀당 5~6명</option>
+                        <option value="6" selected>팀당 6명</option>
+                        <option value="7">팀당 7~8명</option>
+                    </select>
+                    <div class="d-md-none">
+                        <button type="button" id="sidebarCollapse" class="btn btn-secondary">
+                            <i class="fa-solid fa-bars"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Teams Grid -->
+            <div class="row g-4" id="teamsRow">
+                <!-- Team Cards Injected Here -->
+            </div>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/script.js"></script>
+    <script>
+        // State: Array of Arrays [[id, id], [id, id]...]
+        let teams = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            renderSidebar('teams');
+            await initData();
+            initTeams();
+            renderTeams();
+
+            document.getElementById('teamSizeSelect').addEventListener('change', () => {
+                alert("팀 크기 변경 시 초기화됩니다. (PoC 버전)");
+                initTeams();
+                renderTeams();
+            });
+        });
+
+        function initTeams() {
+            // Distribute students into 6 teams
+            teams = [[], [], [], [], [], []];
+            globalStudents.forEach((s, i) => {
+                teams[i % 6].push(s.id);
+            });
+        }
+
+        function renderTeams() {
+            const container = document.getElementById('teamsRow');
+            container.innerHTML = '';
+
+            teams.forEach((members, teamIndex) => {
+                const teamStats = calculateTeamStats(members);
+
+                // Colorize probability
+                let probColor = 'text-success';
+                let headerClass = 'bg-white';
+                if (teamStats.probability < 80) {
+                    probColor = 'text-warning';
+                    headerClass = 'bg-warning-subtle';
+                }
+
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-xl-4';
+                col.innerHTML = `
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header border-0 ${headerClass} d-flex justify-content-between align-items-center">
+                            <h5 class="fw-bold m-0">Team ${String.fromCharCode(65 + teamIndex)}</h5>
+                            <div class="fw-bold ${probColor}">
+                                <i class="fa-solid fa-chart-line me-1"></i> 생존율 ${teamStats.probability}%
+                            </div>
+                        </div>
+                        <div class="card-body p-3 bg-light">
+                            <div class="team-container" data-team="${teamIndex}">
+                                <!-- Students -->
+                            </div>
+                        </div>
+                        <div class="card-footer bg-white border-0">
+                            <small class="text-secondary d-flex align-items-start gap-2">
+                                <i class="fa-regular fa-lightbulb text-warning mt-1"></i>
+                                <span>${teamStats.comment}</span>
+                            </small>
+                        </div>
+                    </div>
+                `;
+
+                const teamContainer = col.querySelector('.team-container');
+                setupDropZone(teamContainer, teamIndex);
+
+                members.forEach(mId => {
+                    teamContainer.appendChild(createStudentItem(mId, teamIndex));
+                });
+
+                container.appendChild(col);
+            });
+        }
+
+        function createStudentItem(studentId, teamIndex) {
+            const s = getStudentById(studentId);
+            const div = document.createElement('div');
+            div.className = 'student-item';
+            div.draggable = true;
+
+            // Badges
+            let badges = '';
+            if (s.career !== '신입') badges += `<span class="badge badge-career me-1 rounded-pill"><i class="fa-solid fa-laptop-code"></i> ${s.career}</span>`;
+            // Mock Leader
+            if (['ENTJ', 'ESTJ'].includes(s.mbti)) badges += `<span class="badge badge-leader me-1 rounded-pill">👑 리더</span>`;
+
+            div.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <div class="fw-bold text-dark">${s.name}</div>
+                    <small class="text-muted" style="font-size:0.75rem">${s.mbti}</small>
+                </div>
+                <div>${badges}</div>
+            `;
+
+            div.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('studentId', s.id);
+                e.dataTransfer.setData('fromTeam', teamIndex);
+            });
+
+            // Click for details
+            div.addEventListener('click', (e) => {
+                // Prevent click if dragging logic interferes? No, click is fine.
+                openProfileModal(s.id);
+            });
+
+            return div;
+        }
+
+        function setupDropZone(el, teamIndex) {
+            el.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                el.classList.add('drag-over');
+            });
+            el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+            el.addEventListener('drop', (e) => {
+                e.preventDefault();
+                el.classList.remove('drag-over');
+                const studentId = parseInt(e.dataTransfer.getData('studentId'));
+                const fromTeam = parseInt(e.dataTransfer.getData('fromTeam'));
+
+                if (isNaN(studentId) || fromTeam === teamIndex) return;
+
+                // Move logic
+                // Remove from old
+                teams[fromTeam] = teams[fromTeam].filter(id => id !== studentId);
+                // Add to new
+                teams[teamIndex].push(studentId);
+
+                renderTeams();
+            });
+        }
+
+        function calculateTeamStats(members) {
+            // Mock Logic
+            if (members.length === 0) return { probability: 0, comment: "팀원이 없습니다." };
+
+            let score = 70; // Base
+            let hasLeader = false;
+            let hasCareer = false;
+            let conflictRisk = false;
+
+            members.forEach(id => {
+                const s = getStudentById(id);
+                if (s.score === 'S') score += 5;
+                if (s.score === 'A') score += 2;
+                if (['ENTJ', 'ESTJ', 'ENFJ'].includes(s.mbti)) hasLeader = true;
+                if (s.career !== '신입') hasCareer = true;
+                if (s.risk_factors.includes('과거 갈등 이력')) conflictRisk = true;
+            });
+
+            if (hasLeader) score += 10;
+            else score -= 10;
+
+            if (!hasCareer) score -= 5;
+            if (conflictRisk) score -= 15;
+
+            // Clamp
+            if (score > 98) score = 98;
+            if (score < 40) score = 40;
+
+            let comment = "밸런스가 무난합니다.";
+            if (!hasLeader) comment = "💡 리더 성향(E_TJ)의 부재로 의사결정이 지연될 수 있습니다.";
+            else if (conflictRisk) comment = "💡 갈등 이력이 있는 팀원이 포함되어 관리가 필요합니다.";
+            else if (score > 90) comment = "💡 최상의 팀워크가 기대되는 조합입니다!";
+
+            return { probability: score, comment: comment };
+        }
+    </script>
+</body>
+
+</html>
